@@ -246,6 +246,19 @@ async function replyTargets(ctx, ownerId) {
 function createBot(token) {
   const bot = new Telegraf(token);
 
+  // Log de cada update con latencia (visible en Render Logs)
+  bot.use(async (ctx, next) => {
+    const t0 = Date.now();
+    try {
+      await next();
+    } finally {
+      const ms = Date.now() - t0;
+      const who = ctx.from?.id ?? '?';
+      const where = ctx.chat?.id ?? ctx.update?.channel_post?.chat?.id ?? '?';
+      console.log(`[update] ${ctx.updateType} chat=${where} from=${who} ${ms}ms${ms > 5000 ? ' SLOW' : ''}`);
+    }
+  });
+
   bot.start(async (ctx) => {
     if (!isPrivate(ctx)) {
       await ctx.reply('🤖 Háblame en privado para vincular tus grupos: /start').catch(() => {});

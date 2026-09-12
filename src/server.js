@@ -30,14 +30,21 @@ app.use(express.json());
 app.get('/', (_req, res) => res.json({ service: 'telegram-mirror-bot', mode: 'webhook' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'telegram-mirror-bot', ts: new Date().toISOString() }));
 
-// Doble proteccion: path secreto + header secret_token de Telegram
-app.post(WEBHOOK_PATH, (req, res, next) => {
+// Doble proteccion: path secreto + header secret_token de Telegram.
+// ACK inmediato (200) y proceso en background: si el handler tarda
+// (fan-out a 50, DB lenta...), Telegram no declara timeout ni reintenta.
+app.post(WEBHOOK_PATH, (req, res) => {
   if (req.get('x-telegram-bot-api-secret-token') !== WEBHOOK_SECRET) {
     console.warn('[webhook] secreto invalido, rechazo update');
     return res.sendStatus(401);
   }
-  next();
-}, bot.webhookCallback(WEBHOOK_PATH));
+  res.sendStatus(200);
+  const uid = req.body && req.body.update_id;
+  console.log(`[webhook] update ${uid} ACK, procesando...`);
+  bot.handleUpdate(req.body).catch((err) => {
+    console.error(`[webhook] update ${uid} fallo:`, err?.response?.description || err.message);
+  });
+});
 
 async function start() {
   await db.ping().catch((e) => {
@@ -60,6 +67,10 @@ async function start() {
   }
   app.listen(PORT, () => console.log(`[OK] Escuchando en puerto ${PORT} (path ${WEBHOOK_PATH})`));
 }
+
+process.on('unhandledRejection', (e) => {
+  console.error('[FATAL-ish] unhandledRejection:', e?.response?.description || e?.message || e);
+});
 
 start();
 process.once('SIGINT', () => process.exit(0));
