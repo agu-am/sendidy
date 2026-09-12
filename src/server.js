@@ -30,6 +30,33 @@ app.use(express.json());
 app.get('/', (_req, res) => res.json({ service: 'telegram-mirror-bot', mode: 'webhook' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'telegram-mirror-bot', ts: new Date().toISOString() }));
 
+const BOOT_TS = Date.now();
+// Diagnostico sin logs de Render: /diag?key=<WEBHOOK_SECRET> mide DB desde el servidor.
+app.get('/diag', async (req, res) => {
+  if (req.query.key !== WEBHOOK_SECRET) return res.sendStatus(401);
+  const out = { uptime_s: Math.round((Date.now() - BOOT_TS) / 1000), version: '2b23bc7+' };
+  try {
+    let t0 = Date.now();
+    await db.ping();
+    out.db_ping_ms = Date.now() - t0;
+    t0 = Date.now();
+    const r = await db.getPool().query(
+      'select (select count(*) from owners) as owners, (select count(*) from groups) as groups, (select count(*) from fanout_log) as logs'
+    );
+    out.db_counts_ms = Date.now() - t0;
+    out.counts = r.rows[0];
+    // Prueba Telegram API egress
+    t0 = Date.now();
+    await bot.telegram.getMe();
+    out.tg_api_ms = Date.now() - t0;
+    out.status = 'ok';
+  } catch (e) {
+    out.status = 'error';
+    out.error = e.message;
+  }
+  res.json(out);
+});
+
 // Doble proteccion: path secreto + header secret_token de Telegram.
 // ACK inmediato (200) y proceso en background: si el handler tarda
 // (fan-out a 50, DB lenta...), Telegram no declara timeout ni reintenta.
