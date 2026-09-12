@@ -1,0 +1,22 @@
+{
+  "name": "telegram-mirror-bot",
+  "version": "1.0.0",
+  "description": "Bot propio gratis: admins citan un mensaje en el grupo origen y con /enviar lo replica a N grupos/canales.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "selftest": "node scripts/selftest.js",
+    "import": "node scripts/import_targets.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "telegraf": "^4.16.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

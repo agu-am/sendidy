@@ -1,0 +1,5 @@
+[
+  { "alias": "vip", "id": -1001111111111, "type": "group", "name": "Grupo VIP" },
+  { "alias": "ventas", "id": -1002222222222, "type": "group", "name": "Grupo Ventas" },
+  { "alias": "canal1", "id": -1003333333333, "type": "channel", "name": "Canal 1" }
+]
