@@ -288,9 +288,8 @@ function createBot(token) {
   ));
 
   bot.command('id', async (ctx) => {
-    const lines = [`chat.id: \`${ctx.chat?.id}\``, `tu user.id: \`${ctx.from?.id}\``];
-    if (ctx.message?.reply_to_message) lines.push(`mensaje citado id: \`${ctx.message.reply_to_message.message_id}\``);
-    await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' }).catch(() => {});
+    const label = isPrivate(ctx) ? 'TU ID' : 'ID GRUPO/CANAL';
+    await ctx.reply(`${label}: \`${ctx.chat?.id}\``, { parse_mode: 'Markdown' }).catch(() => {});
   });
 
   bot.command('plan', async (ctx) => {
@@ -465,12 +464,17 @@ function createBot(token) {
       await ctx.reply('⚠️ Por seguridad, /backup solo funciona en chat privado conmigo.').catch(() => {});
       return;
     }
-    const data = await db.exportOwner(ctx.from.id);
-    const stamp = new Date().toISOString().slice(0, 10);
-    await ctx.replyWithDocument(
-      { source: Buffer.from(JSON.stringify(data, null, 2), 'utf8'), filename: `backup-mirror-${ctx.from.id}-${stamp}.json` },
-      { caption: `💾 Tu backup: ${data.origins.length} origen(es), ${data.dests.length} destino(s). Guárdalo; con /restore (citando el archivo) lo reimportas.` }
-    ).catch(() => {});
+    try {
+      const data = await db.exportOwner(ctx.from.id);
+      const stamp = new Date().toISOString().slice(0, 10);
+      await ctx.replyWithDocument(
+        { source: Buffer.from(JSON.stringify(data, null, 2), 'utf8'), filename: `backup-mirror-${ctx.from.id}-${stamp}.json` },
+        { caption: `💾 Tu backup: ${data.origins.length} origen(es), ${data.dests.length} destino(s). Guárdalo; con /restore (citando el archivo) lo reimportas.` }
+      ).catch(() => {});
+    } catch (e) {
+      console.error(`[backup] owner=${ctx.from?.id}:`, e.message);
+      await ctx.reply('⚠️ No pude generar tu backup (fallo de base de datos). Probá de nuevo en 1 minuto; si sigue, avisame.').catch(() => {});
+    }
   });
 
   bot.command('restore', async (ctx) => {
