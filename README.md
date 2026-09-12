@@ -21,14 +21,12 @@ Admin del servicio: `/activar <user_id> <free|pro> [dias]`.
 2. SQL Editor → New query → pega `supabase/schema.sql` → Run (crea `owners`, `link_codes`, `groups`, `fanout_log` con RLS bloqueado).
 3. Connect → **Transaction pooler** (puerto 6543, modo Session) → copia la connection string y ponla en `DATABASE_URL` (reemplaza `[YOUR-PASSWORD]` con URL-encoding si tiene símbolos).
 
-## 1. GitHub (una vez)
+## 1. GitHub (listo ✅)
 
+Repo: https://github.com/agu-am/sendidy (rama `main`, remoto `origin` ya configurado).
+Para subir cambios futuros:
 ```powershell
-cd C:\Users\Agustin\projects\telegram-mirror-bot
-git init; git add -A; git commit -m "mirror bot webhook multi-tenant"
-gh repo create telegram-mirror-bot --private --source=. --push
-# sin gh CLI: crea el repo privado en github.com y luego:
-# git remote add origin https://github.com/TUUSER/telegram-mirror-bot.git; git push -u origin main
+git add -A; git commit -m "tu cambio"; git push
 ```
 
 ## 2. Local por webhook (ngrok)
