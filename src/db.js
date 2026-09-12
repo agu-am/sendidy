@@ -180,9 +180,75 @@ async function countToday(ownerId) {
   return rows[0].n;
 }
 
+async function getStats(ownerId) {
+  const pool = getPool();
+  const [{ rows: rc }, { rows: [today] }, { rows: [w7] }, { rows: [m30] }, { rows: recent }] = await Promise.all([
+    pool.query("select role, count(*)::int as n from groups where owner_id = $1 group by role", [ownerId]),
+    pool.query("select count(*)::int as sends from fanout_log where owner_id = $1 and created_at > now() - interval '24 hours'", [ownerId]),
+    pool.query("select count(*)::int as sends, coalesce(sum(dest_total),0)::int as copies, coalesce(sum(dest_ok),0)::int as ok from fanout_log where owner_id = $1 and created_at > now() - interval '7 days'", [ownerId]),
+    pool.query("select count(*)::int as sends, coalesce(sum(dest_total),0)::int as copies, coalesce(sum(dest_ok),0)::int as ok from fanout_log where owner_id = $1 and created_at > now() - interval '30 days'", [ownerId]),
+    pool.query("select source_chat, dest_total, dest_ok, created_at from fanout_log where owner_id = $1 order by id desc limit 10", [ownerId]),
+  ]);
+  const byRole = Object.fromEntries(rc.map((r) => [r.role, r.n]));
+  return {
+    origins: byRole.origen || 0,
+    dests: byRole.destino || 0,
+    today: today.sends,
+    w7, m30,
+    recent: recent.map((r) => ({ ...r, source_chat: Number(r.source_chat) })),
+  };
+}
+
+async function exportOwner(ownerId) {
+  const owner = await getOwner(ownerId);
+  const origins = await listGroups(ownerId, 'origen');
+  const dests = await listGroups(ownerId, 'destino');
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    owner: owner ? { user_id: Number(owner.user_id), plan: owner.plan, expires_at: owner.expires_at } : { user_id: Number(ownerId) },
+    origins: origins.map((o) => ({ chat_id: o.id, type: o.type, name: o.name })),
+    dests: dests.map((d) => ({ chat_id: d.id, alias: d.alias, type: d.type, name: d.name })),
+  };
+}
+
+async function exportAll() {
+  const { rows: owners } = await getPool().query('select user_id from owners order by user_id');
+  const out = { version: 1, exported_at: new Date().toISOString(), owners: [] };
+  for (const o of owners) out.owners.push(await exportOwner(Number(o.user_id)));
+  return out;
+}
+
+// Reimporta un backup propio. Respeta topes del plan y no pisa otros dueños.
+async function importOwnerData(ownerId, data, maxDests) {
+  const res = { originsOk: 0, originsSkipped: [], destsOk: 0, destsSkipped: [] };
+  for (const o of data.origins || []) {
+    if (!Number.isFinite(Number(o.chat_id))) { res.originsSkipped.push(`${o.chat_id}: id inválido`); continue; }
+    const r = await linkOrigin(Number(o.chat_id), ownerId, o.name || String(o.chat_id), o.type === 'channel' ? 'channel' : 'group');
+    if (r.ok) res.originsOk++;
+    else res.originsSkipped.push(`${o.chat_id}: ${r.reason === 'vinculado_otro' ? 'origen de otro dueño' : 'ya vinculado'}`);
+  }
+  for (const d of data.dests || []) {
+    const alias = String(d.alias || '').trim().toLowerCase();
+    if (!/^[a-z0-9_]{2,24}$/.test(alias) || !Number.isFinite(Number(d.chat_id))) {
+      res.destsSkipped.push(`${d.alias || d.chat_id}: dato inválido`);
+      continue;
+    }
+    if ((await countDests(ownerId)) >= maxDests) {
+      res.destsSkipped.push(`${alias}: tope del plan (${maxDests})`);
+      continue;
+    }
+    const r = await addDest(Number(d.chat_id), ownerId, alias, d.type === 'channel' ? 'channel' : 'group', d.name || alias);
+    if (r.ok) res.destsOk++;
+    else res.destsSkipped.push(`${alias}: alias en uso`);
+  }
+  return res;
+}
+
 module.exports = {
   ping, getOwner, effectivePlan, ensureOwner, setPlan,
   createLinkCode, consumeLinkCode, linkOrigin, getOriginOwner,
   addDest, listGroups, countDests, removeDest, logFanout, countToday,
+  getStats, exportOwner, exportAll, importOwnerData,
   getPool,
 };

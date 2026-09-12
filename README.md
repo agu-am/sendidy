@@ -10,7 +10,7 @@ En grupo vinculado (solo admins, citando un mensaje):
 - `/enviar_varios <a,b,c>` → a varios (solo Pro)
 - `/vincular VINC-XXXX` → hace este grupo tu origen · `/misgrupos` · `/plan` · `/quitar` · `/id`
 
-En privado: `/start` (da tu código), `/agregar <ID> <alias>`, `/misgrupos`, `/plan`, `/id`.
+En privado: `/start` (da tu código), `/agregar <ID> <alias>`, `/misgrupos`, `/plan`, `/stats`, `/backup`, `/restore` (citando el .json), `/id`. Admin: `/activar`, `/backup_all`.
 En destino (grupo/canal donde está el bot): `/agregar <alias>`.
 En canales solo funciona `/id` (luego borra esos mensajes, son visibles).
 Admin del servicio: `/activar <user_id> <free|pro> [dias]`.

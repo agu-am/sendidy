@@ -3,7 +3,7 @@
 // Uso con cita: /enviar (todos) · /enviar_a <uno> · /enviar_varios <lista>
 const { Telegraf } = require('telegraf');
 const db = require('./db');
-const { splitList, argsAfterCommand, resolveInList, hintFor } = require('./util');
+const { splitList, argsAfterCommand, resolveInList, hintFor, formatStats, validateBackup } = require('./util');
 
 const SEND_DELAY_MS = Math.max(0, parseInt(process.env.SEND_DELAY_MS || '80', 10) || 0);
 const ADMIN_CACHE_TTL = Math.max(30, parseInt(process.env.ADMIN_CACHE_TTL || '300', 10) || 300);
@@ -257,7 +257,7 @@ function createBot(token) {
     await ctx.reply(
       `👋 Tu código para vincular grupos (15 min):\n\`${code}\`\n\n` +
       `1️⃣ Agrega al bot a tu grupo origen\n2️⃣ Ahí (como admin) manda: /vincular ${code}\n3️⃣ En cada destino: /agregar <alias>\n\n` +
-      `Comandos: /misgrupos · /plan · /agregar · /quitar · /id\n` +
+      `Comandos: /misgrupos · /plan · /stats · /agregar · /quitar · /backup · /id\n` +
       (isSuper ? `\n🛠️ Admin: /activar <user_id> <free|pro> [dias]` : ``) +
       `\nPlan actual: ${db.effectivePlan(owner)} (Free: 1 origen + ${FREE_MAX_DESTS} destinos)`,
       { parse_mode: 'Markdown' }
@@ -270,7 +270,8 @@ function createBot(token) {
     '• /enviar_varios vip,ventas — a varios\n\n' +
     '• /vincular CODIGO — hace este grupo tu origen\n' +
     '• /agregar <alias> — hace este chat tu destino\n' +
-    '• /misgrupos · /plan · /quitar · /id'
+    '• /misgrupos · /plan · /stats · /quitar · /id\n' +
+    '• En privado: /backup (descarga tu config) · /restore (citando el .json lo reimporta)'
   ));
 
   bot.command('id', async (ctx) => {
@@ -426,6 +427,96 @@ function createBot(token) {
       return;
     }
     await replyTargets(ctx, r.ownerId);
+  });
+
+  bot.command('stats', async (ctx) => {
+    const r = await resolveOwner(ctx);
+    if (!r.ownerId) {
+      await ctx.reply('⚠️ Sin dueño aquí. En privado: /start. En tu grupo: /vincular CODIGO.').catch(() => {});
+      return;
+    }
+    const st = await db.getStats(r.ownerId);
+    const maxDests = r.plan === 'pro' ? PRO_MAX_DESTS : FREE_MAX_DESTS;
+    const cap = r.plan === 'pro' ? PRO_DAILY_SENDS : FREE_DAILY_SENDS;
+    await ctx.reply(formatStats({
+      plan: r.plan,
+      expires: r.owner?.expires_at ? new Date(r.owner.expires_at).toLocaleDateString() : null,
+      origins: st.origins, dests: st.dests, maxDests,
+      todaySends: st.today, todayCap: cap,
+      w7: st.w7, m30: st.m30, recent: st.recent,
+    })).catch(() => {});
+  });
+
+  bot.command('backup', async (ctx) => {
+    if (!isPrivate(ctx)) {
+      await ctx.reply('⚠️ Por seguridad, /backup solo funciona en chat privado conmigo.').catch(() => {});
+      return;
+    }
+    const data = await db.exportOwner(ctx.from.id);
+    const stamp = new Date().toISOString().slice(0, 10);
+    await ctx.replyWithDocument(
+      { source: Buffer.from(JSON.stringify(data, null, 2), 'utf8'), filename: `backup-mirror-${ctx.from.id}-${stamp}.json` },
+      { caption: `💾 Tu backup: ${data.origins.length} origen(es), ${data.dests.length} destino(s). Guárdalo; con /restore (citando el archivo) lo reimportas.` }
+    ).catch(() => {});
+  });
+
+  bot.command('restore', async (ctx) => {
+    if (!isPrivate(ctx)) {
+      await ctx.reply('⚠️ Por seguridad, /restore solo funciona en chat privado conmigo.').catch(() => {});
+      return;
+    }
+    const doc = ctx.message?.reply_to_message?.document;
+    if (!doc || !/\.json$/i.test(doc.file_name || '')) {
+      await ctx.reply('⚠️ Uso: reenvíame tu .json de backup, CÍTALO y manda /restore.', {
+        reply_to_message_id: ctx.message.message_id,
+      }).catch(() => {});
+      return;
+    }
+    if ((doc.file_size || 0) > 1024 * 1024) {
+      await ctx.reply('⚠️ Archivo muy grande (>1MB). ¿Es el backup del bot?').catch(() => {});
+      return;
+    }
+    let data;
+    try {
+      const link = await ctx.telegram.getFileLink(doc.file_id);
+      const res = await fetch(link.href);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } catch (e) {
+      await ctx.reply(`⚠️ No pude leer el archivo: ${e.message}`).catch(() => {});
+      return;
+    }
+    const v = validateBackup(data);
+    if (!v.ok) {
+      await ctx.reply(`⚠️ ${v.error}`).catch(() => {});
+      return;
+    }
+    const owner = await db.ensureOwner(ctx.from.id);
+    const plan = db.effectivePlan(owner);
+    const res2 = await db.importOwnerData(ctx.from.id, data, plan === 'pro' ? PRO_MAX_DESTS : FREE_MAX_DESTS);
+    const lines = [
+      `♻️ Restore listo (plan ${plan}):`,
+      `Orígenes: ${res2.originsOk} ok${res2.originsSkipped.length ? `, omitidos: ${res2.originsSkipped.join('; ')}` : ''}`,
+      `Destinos: ${res2.destsOk} ok${res2.destsSkipped.length ? `, omitidos: ${res2.destsSkipped.join('; ')}` : ''}`,
+    ];
+    await ctx.reply(lines.join('\n')).catch(() => {});
+  });
+
+  bot.command('backup_all', async (ctx) => {
+    if (!ADMIN_IDS.has(String(ctx.from?.id))) {
+      await ctx.reply('⛔ Solo el administrador del servicio.').catch(() => {});
+      return;
+    }
+    if (!isPrivate(ctx)) {
+      await ctx.reply('⚠️ Por seguridad, /backup_all solo en privado.').catch(() => {});
+      return;
+    }
+    const data = await db.exportAll();
+    const stamp = new Date().toISOString().slice(0, 10);
+    await ctx.replyWithDocument(
+      { source: Buffer.from(JSON.stringify(data, null, 2), 'utf8'), filename: `backup-all-${stamp}.json` },
+      { caption: `💾 Backup global: ${data.owners.length} dueño(s). Guárdalo fuera del servidor.` }
+    ).catch(() => {});
   });
 
   bot.command('activar', async (ctx) => {

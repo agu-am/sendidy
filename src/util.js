@@ -68,4 +68,50 @@ function hintFor(destLabel, errDesc) {
   return `${destLabel}: ${d.slice(0, 160)}`;
 }
 
-module.exports = { splitList, argsAfterCommand, genLinkCode, resolveInList, hintFor };
+function pct(ok, total) {
+  if (!total) return '—';
+  return `${Math.round((ok / total) * 100)}%`;
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  const p = (x) => String(x).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function formatStats(s) {
+  const lines = [
+    '📊 Tus stats',
+    `Plan ${s.plan}${s.expires ? ` (hasta ${s.expires})` : ''}`,
+    `Orígenes: ${s.origins} · Destinos: ${s.dests}/${s.maxDests}`,
+    `Hoy: ${s.todaySends}/${s.todayCap} envíos`,
+    '',
+    `7 días: ${s.w7.sends} envíos · ${s.w7.ok}/${s.w7.copies} copias (${pct(s.w7.ok, s.w7.copies)})`,
+    `30 días: ${s.m30.sends} envíos · ${s.m30.ok}/${s.m30.copies} copias (${pct(s.m30.ok, s.m30.copies)})`,
+  ];
+  if (s.recent.length) {
+    lines.push('', 'Recientes:');
+    for (const r of s.recent.slice(0, 10)) {
+      lines.push(`• ${fmtDate(r.created_at)} — ${r.dest_ok}/${r.dest_total}`);
+    }
+  } else {
+    lines.push('', 'Sin envíos todavía. Cita un mensaje + /enviar para estrenar.');
+  }
+  return lines.join('\n');
+}
+
+// Valida un backup antes de importar. -> { ok:true } | { ok:false, error }
+function validateBackup(data) {
+  if (!data || typeof data !== 'object' || data.version !== 1) {
+    return { ok: false, error: 'Archivo inválido (¿es un backup del bot? Se espera version 1).' };
+  }
+  if (data.dests !== undefined && !Array.isArray(data.dests)) {
+    return { ok: false, error: 'Campo "dests" corrupto.' };
+  }
+  if (data.origins !== undefined && !Array.isArray(data.origins)) {
+    return { ok: false, error: 'Campo "origins" corrupto.' };
+  }
+  return { ok: true };
+}
+
+module.exports = { splitList, argsAfterCommand, genLinkCode, resolveInList, hintFor, formatStats, validateBackup };
