@@ -284,8 +284,32 @@ function createBot(token) {
     '• /vincular CODIGO — hace este grupo tu origen\n' +
     '• /agregar <alias> — hace este chat tu destino\n' +
     '• /misgrupos · /plan · /stats · /quitar · /id\n' +
-    '• En privado: /backup (descarga tu config) · /restore (citando el .json lo reimporta)'
+    '• En privado: /backup (descarga tu config) · /restore (citando el .json lo reimporta)\n' +
+    '• Guía paso a paso: /guia'
   ));
+
+  bot.command('guia', async (ctx) => {
+    await ctx.reply(
+      '📖 Guía paso a paso\n\n' +
+      '1. Vincular tu grupo origen\n' +
+      '① En privado conmigo: /start → te doy un código.\n' +
+      '② Agrégame a tu grupo origen.\n' +
+      '③ Ahí, como admin: /vincular CODIGO.\n\n' +
+      '2. Agregar destinos\n' +
+      '④ En cada grupo/canal destino (conmigo adentro): /agregar mialias\n' +
+      '⑤ En canales debo ser admin con Publicar mensajes.\n' +
+      '⑥ O desde privado: /agregar -100... mialias (el ID lo sacas con /id dentro del grupo/canal).\n\n' +
+      '3. Enviar (solo admins, citando un mensaje en tu origen)\n' +
+      '⑦ /enviar → a TODOS tus destinos.\n' +
+      '⑧ /enviar_a vip → a uno (alias, ID o nº de /misgrupos).\n' +
+      '⑨ /enviar_varios vip,ventas → a varios (solo Pro).\n\n' +
+      '4. Gestionar\n' +
+      '⑩ /misgrupos → ver tu lista con nº para usar en /enviar_a.\n' +
+      '⑪ /plan → ver tu plan y límites. /stats → tu actividad.\n' +
+      '⑫ /quitar → saca este chat de tus destinos. /id → muestra el ID del chat.\n' +
+      '⑬ En privado: /backup descarga tu config, /restore la reimporta citando el .json.'
+    ).catch(() => {});
+  });
 
   bot.command('id', async (ctx) => {
     const label = isPrivate(ctx) ? 'TU ID' : 'ID GRUPO/CANAL';

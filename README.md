@@ -57,6 +57,24 @@ node scripts/import_targets.js <tu_user_id> targets.json
 
 Luego el flujo normal por cliente: privado `/start` → código → en su grupo `/vincular CODIGO` → en cada destino `/agregar <alias>`.
 
+## Guía para clientes: cómo sacar el ID con /id (para reenviar)
+
+Cuando agregues un destino desde el privado (`/agregar <ID> <alias>`) necesitas el ID del grupo/canal. Se saca así:
+
+**En un grupo:**
+1. Agrega al bot al grupo.
+2. Escribe `/id` y envíalo.
+3. El bot responde `ID GRUPO/CANAL: \`-100...\`` → copia ese número (con el `-` incluido).
+4. Borra tu mensaje `/id` si quieres dejar el grupo limpio.
+
+**En un canal:**
+1. Agrega al bot como **admin con permiso de Publicar mensajes** (si no, no funciona).
+2. Publica `/id` en el canal.
+3. El bot responde `ID GRUPO/CANAL: \`-100...\`` → copia ese número.
+4. Borra ambos mensajes (el bot no puede borrar en canales, queda visible).
+
+Después en privado con el bot: `/agregar -100... mialias` y listo.
+
 ## Notas que siguen valiendo del bot original
 
 - BotFather: `/setprivacy` Disable (+re-agregar a grupos), `/setjoingroups` Enable.
